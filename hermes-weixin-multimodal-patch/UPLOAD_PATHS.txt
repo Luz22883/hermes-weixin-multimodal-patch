@@ -1,0 +1,18 @@
+建议上传到 GitHub 的路径如下：
+
+README.md
+PATCH_NOTES.md
+files/gateway/platforms/base.py
+files/gateway/platforms/weixin.py
+files/gateway/run.py
+files/gateway/session.py
+files/gateway/tests/test_multimodal_hardening.py
+
+上传顺序建议：
+1. README.md
+2. PATCH_NOTES.md
+3. files/gateway/platforms/base.py
+4. files/gateway/run.py
+5. files/gateway/session.py
+6. files/gateway/platforms/weixin.py
+7. files/gateway/tests/test_multimodal_hardening.py
