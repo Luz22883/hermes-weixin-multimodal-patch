@@ -109,3 +109,133 @@ Hermes 在旧行为下，容易出现这些问题：
     ]
   }
 }
+这样做的目的：
+
+减少 replay / rewrite 逻辑分支
+保证 /retry、/undo、/compress 都能稳定依赖统一 schema
+纯文本和多模态输入共享同一持久化契约
+5. attachment classifier 统一
+本补丁让 transcript 持久化和 inbound 预处理共享同一套附件分类逻辑，避免出现：
+
+预处理阶段把它当音频
+transcript 里却把它当文件
+当前统一后的规则：
+
+image -> input_image
+voice / audio -> input_audio
+video -> input_file
+file / document -> input_file
+text -> input_text
+本轮中，video 暂时 canonical 成 input_file，优先保证 schema 稳定，不在这一轮引入 input_video。
+
+6. /retry、/undo、/compress 的 richer 保真
+/retry
+优先从 gateway_event 重建：
+
+original_text
+message_type
+media_urls
+media_types
+而不是只依赖 plain content。
+
+/undo
+预览优先显示：
+
+gateway_event.original_text
+/compress
+保留 surviving original user rows 的 gateway_event，避免压缩后只剩下简化版 role/content。
+
+auto-compress
+同样恢复 surviving original user rows 的 richer metadata。
+
+7. JSONL richer transcript 优先策略
+本轮没有改 SQLite schema。
+当前策略仍然是：
+
+richer metadata 主要由 JSONL 保留
+当 JSONL 与 SQLite 至少一样完整时，优先使用 JSONL
+这保证了当前多模态回放链路先稳定工作。
+
+本补丁明确不做的事情
+以下内容不在本轮范围内：
+
+不做 SQLite schema migration
+不把 SQLite 直接升级成 richer metadata source of truth
+不尝试持久化完整原始平台 raw_message
+不在本轮引入新的 video transcript block 语义
+不声称已经覆盖 Hermes 全仓库所有集成测试
+当前验证范围
+本补丁主要通过 focused regression tests 与最小 smoke 验证来确认行为。
+
+覆盖的重点包括：
+
+图片 + 两条快速说明 -> 1 logical turn
+delayed text 不 merge
+late photo 不 merge
+纯文本 follow-up 保持两个 queued turns
+plain-text user turn 强制带 gateway_event
+voice -> input_audio
+video -> canonical input_file
+/retry 重建 multimodal MessageEvent
+/undo 预览优先 original text
+/compress 保留 surviving user rows 的 gateway_event
+auto-compress 同样保 richer user event
+equal-length 情况下 load_transcript() 优先 richer JSONL
+当前已知边界
+1. SQLite 仍然是 core-only
+当前 richer replay 仍依赖 JSONL，而不是 SQLite metadata。
+
+2. richer rehydrate 逻辑是保守恢复
+对于重复内容的恢复，会优先避免误绑，而不是激进猜测。
+
+3. 这是 focused patch，不是完整 Hermes 发布版
+这里公开的是补丁思路和相关修改，不是完整 Hermes 仓库。
+
+建议的后续演进方向
+下一阶段更合理的方向是：
+
+SQLite richer metadata migration
+推荐未来给 SQLite 增加：
+
+metadata_json
+而不是只加：
+
+gateway_event_json
+原因是后续 transcript metadata 很可能继续增长，metadata_json 更有扩展性。
+
+推荐路径：
+
+SQLite 新增 metadata_json
+新消息开始双写
+JSONL 继续保留一段时间
+逐步切换到 SQLite 为主
+再做 lazy migration / opportunistic backfill
+仓库内容说明
+本仓库只用于公开与该补丁直接相关的内容，通常包括：
+
+说明文档
+变更说明
+相关代码片段或 patch 文件
+最小测试/验证信息
+不会包含：
+
+Hermes 全量代码镜像
+服务器配置
+本地绝对路径
+token / cookie / 密钥
+与本补丁无关的私有交接内容
+推荐上游化方式
+如果后续要把这套修改继续贡献回 Hermes 主仓库，更推荐走：
+
+清理后的 focused commits
+只提交改动文件
+用 1~2 个 PR 分拆：
+队列与 transcript 保真
+Weixin 兼容修复（可选单独拆）
+致谢
+感谢 Hermes Agent 提供的基础架构与网关能力，这个补丁是在真实微信多模态会话场景下，对现有行为做的一次 focused hardening。
+
+免责声明
+本仓库仅公开补丁相关内容与实现思路，不代表 Hermes 官方发布版本。
+如需完整运行 Hermes，请使用 Hermes 官方仓库与官方发布流程。
+
